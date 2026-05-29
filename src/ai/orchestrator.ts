@@ -33,6 +33,7 @@ import {
   buildShotAnalysisPrompt,
   parseShotAnalysisResponse,
 } from './prompts/script-breakdown';
+import type { ScriptBreakdown, ShotAnalysis } from '../types';
 
 import {
   buildTimelineAnalysisPrompt,

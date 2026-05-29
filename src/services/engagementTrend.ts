@@ -13,16 +13,6 @@ export function extractCommentTimestamps(
   comments: Comment[],
   durationSec: number,
 ): ExtractedTimeRef[] {
-  const patterns = [
-    // m:ss or mm:ss at word boundaries
-    /\b(\d{1,2}):(\d{2})\b/g,
-    // X分Y秒
-    /(\d+)\s*分\s*(\d+)\s*秒/g,
-    // X秒 (standalone, only when not preceded by 分)
-    /(?<![分\d])(\d+)\s*秒/g,
-    // at Xs
-    /\bat\s+(\d+)\s*s\b/gi,
-  ];
 
   const results: ExtractedTimeRef[] = [];
 

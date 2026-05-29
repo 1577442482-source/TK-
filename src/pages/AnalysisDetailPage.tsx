@@ -197,7 +197,7 @@ export default function AnalysisDetailPage() {
         {/* Tab Content */}
         <div className="animate-fade-in">
           {activeTab === 'performance' && <PerformanceTab metrics={metrics} />}
-          {activeTab === 'script-shot' && <ScriptShotTab scriptBreakdown={analysis.scriptBreakdown} shotAnalysis={analysis.shotAnalysis} video={video} />}
+          {activeTab === 'script-shot' && <ScriptShotTab scriptBreakdown={analysis.scriptBreakdown} shotAnalysis={analysis.shotAnalysis} />}
           {activeTab === 'content' && <ContentTab deconstruction={contentDeconstruction} video={video} />}
           {activeTab === 'timeline' && <TimelineTab timelineAnalysis={analysis.timelineAnalysis} />}
           {activeTab === 'comment' && <CommentTab analysis={commentAnalysis} />}
@@ -816,7 +816,7 @@ function InsightTab({ analysis }: { analysis: VideoAnalysis }) {
   );
 }
 
-function ScriptShotTab({ scriptBreakdown, shotAnalysis, video }: { scriptBreakdown: ScriptBreakdown | null; shotAnalysis: ShotAnalysis | null; video: VideoSource }) {
+function ScriptShotTab({ scriptBreakdown, shotAnalysis }: { scriptBreakdown: ScriptBreakdown | null; shotAnalysis: ShotAnalysis | null }) {
   const { isAnalyzing, currentStep } = useAIStore();
   const isAnalyzingScriptShot = isAnalyzing && currentStep === 'script-shot';
 
