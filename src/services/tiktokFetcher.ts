@@ -1,6 +1,6 @@
 import type { Comment } from '../types';
 
-const PYTHON_API = 'http://127.0.0.1:8765';
+const PYTHON_API = '/api';
 
 export interface TikTokVideoData {
   url: string;
@@ -86,7 +86,7 @@ const pythonScraper: ScraperProvider = {
   name: 'tiktokapipy',
   fetchVideoData: async (videoUrl: string) => {
     try {
-      const resp = await fetch(`${PYTHON_API}/api/fetch?url=${encodeURIComponent(videoUrl)}`);
+      const resp = await fetch(`${PYTHON_API}/fetch?url=${encodeURIComponent(videoUrl)}`);
       if (!resp.ok) return null;
       const json = await resp.json();
       if (!json.success || !json.data) return null;
