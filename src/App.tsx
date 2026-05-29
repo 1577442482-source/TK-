@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/layout/Layout';
 import AnalyzePage from './pages/AnalyzePage';
@@ -6,8 +7,12 @@ import LibraryPage from './pages/LibraryPage';
 import ComparePage from './pages/ComparePage';
 import PatternsPage from './pages/PatternsPage';
 import SettingsPage from './pages/SettingsPage';
+import { useAIStore } from './stores/aiStore';
 
 export default function App() {
+  const loadSettings = useAIStore((s) => s.loadSettings);
+  useEffect(() => { loadSettings(); }, [loadSettings]);
+
   return (
     <BrowserRouter>
       <Routes>

@@ -6,6 +6,100 @@ export interface CommentAnalysisInput {
   videoHashtags: string[];
 }
 
+function formatComments(comments: Comment[]): string {
+  return comments.map((c, i) => `${i + 1}. [likes: ${c.likes}] ${c.text}`).join('\n');
+}
+
+/** Lightweight call #1: sentiment + keywords + summary. Shorter JSON output. */
+export function buildCommentSentimentPrompt(input: CommentAnalysisInput): string {
+  const commentTexts = formatComments(input.comments);
+
+  return `Analyze these TikTok comments. Return ONLY valid JSON, no markdown.
+
+## CONTEXT
+Description: ${input.videoDescription || 'N/A'}
+Hashtags: ${input.videoHashtags.join(', ') || 'None'}
+
+## COMMENTS (${input.comments.length})
+${commentTexts.slice(0, 4000)}
+
+## RETURN THIS JSON
+{
+  "positive": <0-100>,
+  "negative": <0-100>,
+  "neutral": <0-100>,
+  "mixed": <0-100>,
+  "overallScore": <-1.0 to 1.0>,
+  "topKeywords": [{"word": "keyword", "frequency": <number>}],
+  "summary": "one paragraph summary in Chinese"
+}`;
+}
+
+export function parseCommentSentimentResponse(json: string): Partial<CommentAnalysis> | null {
+  try {
+    let cleaned = json.trim();
+    if (cleaned.startsWith('```json')) cleaned = cleaned.slice(7);
+    if (cleaned.startsWith('```')) cleaned = cleaned.slice(3);
+    if (cleaned.endsWith('```')) cleaned = cleaned.slice(0, -3);
+    const data = JSON.parse(cleaned);
+
+    return {
+      sentimentDistribution: {
+        positive: data.positive ?? 0,
+        negative: data.negative ?? 0,
+        neutral: data.neutral ?? 0,
+        mixed: data.mixed ?? 0,
+        overallScore: data.overallScore ?? 0,
+      },
+      topKeywords: Array.isArray(data.topKeywords) ? data.topKeywords.slice(0, 15) : [],
+      summary: data.summary || '',
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Lightweight call #2: themes + questions + patterns. */
+export function buildCommentThemesPrompt(input: CommentAnalysisInput): string {
+  const commentTexts = formatComments(input.comments);
+
+  return `Analyze these TikTok comments for themes, questions, and engagement patterns. Return ONLY valid JSON, no markdown.
+
+## CONTEXT
+Description: ${input.videoDescription || 'N/A'}
+
+## COMMENTS (${input.comments.length})
+${commentTexts.slice(0, 4000)}
+
+## RETURN THIS JSON
+{
+  "themeClusters": [{"theme": "theme in Chinese", "count": <number>, "percentage": <number>, "representativeComments": ["1-2 examples"], "averageSentiment": <-1.0 to 1.0>}],
+  "userQuestions": [{"commentId": "<index from list>", "question": "question in Chinese", "category": "product|usage|pricing|creator|content|other", "frequency": <number>, "isUnanswered": <boolean>}],
+  "engagementPatterns": [{"pattern": "pattern in Chinese", "trigger": "what caused it in Chinese", "frequency": <number>, "significance": <0-100>}],
+  "contentCorrelation": "how comments relate to video content, in Chinese"
+}`;
+}
+
+export function parseCommentThemesResponse(json: string): Partial<CommentAnalysis> | null {
+  try {
+    let cleaned = json.trim();
+    if (cleaned.startsWith('```json')) cleaned = cleaned.slice(7);
+    if (cleaned.startsWith('```')) cleaned = cleaned.slice(3);
+    if (cleaned.endsWith('```')) cleaned = cleaned.slice(0, -3);
+    const data = JSON.parse(cleaned);
+
+    return {
+      themeClusters: Array.isArray(data.themeClusters) ? data.themeClusters.slice(0, 5) : [],
+      userQuestions: Array.isArray(data.userQuestions) ? data.userQuestions : [],
+      engagementPatterns: Array.isArray(data.engagementPatterns) ? data.engagementPatterns : [],
+      contentCorrelation: data.contentCorrelation || '',
+    };
+  } catch {
+    return null;
+  }
+}
+
+// Keep old function for backward compatibility
 export function buildCommentAnalysisPrompt(input: CommentAnalysisInput): string {
   const commentTexts = input.comments.map((c, i) => `${i + 1}. [likes: ${c.likes}] ${c.text}`).join('\n');
 
@@ -16,7 +110,7 @@ export function buildCommentAnalysisPrompt(input: CommentAnalysisInput): string 
 - Hashtags: ${input.videoHashtags.join(', ') || 'None'}
 
 ## COMMENTS (${input.comments.length} total)
-${commentTexts.slice(0, 8000)}
+${commentTexts.slice(0, 5000)}
 
 ## TASK
 Analyze these comments deeply. Return JSON with this exact structure:

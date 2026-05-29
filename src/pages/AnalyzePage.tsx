@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { WandSparkles, ArrowRight, Plus, Trash2, X } from 'lucide-react';
+import { WandSparkles, ArrowRight, Plus, Trash2, X, AlertTriangle, Download, Loader2 } from 'lucide-react';
 import PageTransition from '../components/ui/PageTransition';
 import ProgressBar from '../components/ui/ProgressBar';
 import { useAnalysisStore } from '../stores/analysisStore';
@@ -9,13 +9,14 @@ import { calculateMetrics } from '../services/metricsEngine';
 import { validateTikTokUrl } from '../utils/validators';
 import { generateId } from '../utils/formatters';
 import { runFullAnalysis } from '../ai/orchestrator';
+import { fetchTikTokVideoData, type TikTokVideoData } from '../services/tiktokFetcher';
 import type { VideoSource, Comment, VideoSegment } from '../types';
 import { SEGMENT_TYPES } from '../types';
 
 export default function AnalyzePage() {
   const navigate = useNavigate();
   const { createAnalysis, updateAnalysis } = useAnalysisStore();
-  const { isAnalyzing, progress, currentStep } = useAIStore();
+  const { isAnalyzing, progress, currentStep, error: aiError, clearError } = useAIStore();
 
   // Form state
   const [url, setUrl] = useState('');
@@ -33,8 +34,55 @@ export default function AnalyzePage() {
   const [comments, setComments] = useState<Comment[]>([]);
   const [commentText, setCommentText] = useState('');
   const [notes, setNotes] = useState('');
+  const [thumbnailUrl, setThumbnailUrl] = useState('');
+
+  const [autoFilling, setAutoFilling] = useState(false);
+  const [fillSource, setFillSource] = useState('');
+  const fetchedDataRef = useRef<TikTokVideoData | null>(null);
 
   const urlValid = !url.trim() || validateTikTokUrl(url);
+
+  const handleAutoFill = async () => {
+    if (!urlValid || !url.trim()) return;
+    setAutoFilling(true);
+    try {
+      const data = await fetchTikTokVideoData(url.trim());
+      if (data) {
+        // Check for scraper-level errors (auth required, video unavailable, etc.)
+        if (data._apiError) {
+          setFillSource(data._apiError);
+          setAutoFilling(false);
+          return;
+        }
+
+        fetchedDataRef.current = data;
+
+        setDescription(data.description || description);
+        setCreatorHandle(data.creatorHandle || creatorHandle);
+        if (data.hashtags.length > 0) {
+          setHashtags([...new Set([...hashtags, ...data.hashtags])]);
+        }
+        if (data.views > 0) setViews(data.views);
+        if (data.likes > 0) setLikes(data.likes);
+        if (data.shares > 0) setShares(data.shares);
+        if (data.comments > 0) setCommentCount(data.comments);
+        if (data.saves > 0) setSaves(data.saves);
+        if (data.duration > 0) setDuration(data.duration);
+        if (data.thumbnailUrl) setThumbnailUrl(data.thumbnailUrl);
+        // Populate scraped comments
+        if (data.commentsList && data.commentsList.length > 0) {
+          setComments(data.commentsList);
+          setCommentText(data.commentsList.map(c => c.text).join('\n'));
+        }
+        setFillSource(data.source === 'oembed' ? '已获取基本信息' : '已获取完整数据');
+      } else {
+        setFillSource('未能获取数据，请手动填写');
+      }
+    } catch {
+      setFillSource('获取失败，请手动填写');
+    }
+    setAutoFilling(false);
+  };
 
   const addHashtag = () => {
     const tag = hashtagInput.trim().replace(/^#/, '');
@@ -79,6 +127,7 @@ export default function AnalyzePage() {
   }, [commentText]);
 
   const handleAnalyze = async () => {
+    const fetched = fetchedDataRef.current;
     const video: VideoSource = {
       url: url.trim(),
       creatorHandle: creatorHandle.trim() || undefined,
@@ -86,6 +135,21 @@ export default function AnalyzePage() {
       hashtags,
       duration,
       isManualInput: true,
+      thumbnailUrl: thumbnailUrl || fetched?.thumbnailUrl || undefined,
+      dynamicCover: fetched?.dynamicCover || undefined,
+      musicTitle: fetched?.musicTitle || undefined,
+      musicAuthor: fetched?.musicAuthor || undefined,
+      musicOriginal: fetched?.musicOriginal || undefined,
+      creatorFollowers: fetched?.creatorFollowers || undefined,
+      creatorFollowing: fetched?.creatorFollowing || undefined,
+      creatorHearts: fetched?.creatorHearts || undefined,
+      creatorVideos: fetched?.creatorVideos || undefined,
+      videoWidth: fetched?.videoWidth || undefined,
+      videoHeight: fetched?.videoHeight || undefined,
+      contentCategories: fetched?.contentCategories || undefined,
+      videoDownloadUrl: fetched?.videoDownloadUrl || undefined,
+      creatorVerified: fetched?.creatorVerified || undefined,
+      postedAt: fetched?.postedAt || undefined,
     };
 
     const metrics = calculateMetrics({ views, likes, shares, comments: commentCount, saves });
@@ -142,6 +206,22 @@ export default function AnalyzePage() {
           </div>
         )}
 
+        {/* AI Error Banner */}
+        {aiError && (
+          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start justify-between animate-fade-in">
+            <div className="flex items-start gap-3">
+              <AlertTriangle size={18} className="text-red-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-red-300">AI 分析出错</p>
+                <p className="text-xs text-red-400/80 mt-0.5">{aiError}</p>
+              </div>
+            </div>
+            <button onClick={clearError} className="text-slate-400 hover:text-slate-200 shrink-0">
+              <X size={16} />
+            </button>
+          </div>
+        )}
+
         <div className="space-y-6 stagger-children">
           {/* Video Info */}
           <section className="glass-card rounded-xl p-6 animate-fade-in-up">
@@ -152,13 +232,27 @@ export default function AnalyzePage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="md:col-span-2">
                 <label className="block text-xs text-slate-400 mb-1">视频链接</label>
-                <input
-                  value={url}
-                  onChange={e => setUrl(e.target.value)}
-                  className={`w-full px-3 py-2 border rounded-lg text-sm bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors ${urlValid ? 'border-white/5' : 'border-red-500/30'}`}
-                  placeholder="https://www.tiktok.com/@user/video/123..."
-                />
+                <div className="flex gap-2">
+                  <input
+                    value={url}
+                    onChange={e => setUrl(e.target.value)}
+                    className={`flex-1 px-3 py-2 border rounded-lg text-sm bg-transparent focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors ${urlValid ? 'border-white/5' : 'border-red-500/30'}`}
+                    placeholder="https://www.tiktok.com/@user/video/123..."
+                  />
+                  <button
+                    onClick={handleAutoFill}
+                    disabled={!url.trim() || autoFilling}
+                    className="px-4 py-2 text-sm text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors disabled:opacity-30 flex items-center gap-1.5 shrink-0"
+                  >
+                    {autoFilling ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                    自动获取
+                  </button>
+                </div>
                 {!urlValid && <p className="text-xs text-red-400 mt-1">链接格式不正确</p>}
+                {fillSource && <p className={`text-xs mt-1 ${fillSource.includes('未能') || fillSource.includes('失败') || fillSource.includes('requires') || fillSource.includes('unavailable') ? 'text-red-400' : 'text-emerald-400'}`}>{fillSource}</p>}
+                {thumbnailUrl && (
+                  <img src={thumbnailUrl} alt="Video thumbnail" className="mt-2 rounded-lg max-h-32 object-cover border border-white/5" />
+                )}
               </div>
               <div>
                 <label className="block text-xs text-slate-400 mb-1">创作者账号</label>
@@ -332,7 +426,10 @@ export default function AnalyzePage() {
 }
 
 const ANALYSIS_STEP_LABELS: Record<string, string> = {
-  content: '内容拆解中...',
+  'script-shot': '脚本拆解+分镜分析中...',
+  deconstruction: '内容拆解中...',
+  timeline: '时间线分析中...',
   comment: '评论分析中...',
   insight: '生成洞察+综合归因中...',
+  why: '综合归因中...',
 };

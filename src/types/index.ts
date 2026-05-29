@@ -12,6 +12,20 @@ export interface VideoSource {
   postedAt?: string;
   duration: number; // seconds
   isManualInput: boolean;
+  thumbnailUrl?: string;
+  dynamicCover?: string;
+  musicTitle?: string;
+  musicAuthor?: string;
+  musicOriginal?: boolean;
+  creatorFollowers?: number;
+  creatorFollowing?: number;
+  creatorHearts?: number;
+  creatorVideos?: number;
+  videoWidth?: number;
+  videoHeight?: number;
+  contentCategories?: string[];
+  creatorVerified?: boolean;
+  videoDownloadUrl?: string;
 }
 
 // ============================================================
@@ -167,8 +181,122 @@ export interface CommentAnalysis {
 }
 
 // ============================================================
+// Visual Analysis
+// ============================================================
+
+export interface ScriptBreakdown {
+  scriptStructure: ScriptStructure;
+  segmentScripts: SegmentScript[];
+  overallScore: ScriptScore;
+}
+
+export interface ScriptStructure {
+  hookType: string;
+  hookScript: string;
+  narrativeArc: string;
+  keyLines: string[];
+  copywritingTechniques: string[];
+  toneAndVoice: string;
+}
+
+export interface SegmentScript {
+  segment: string;
+  purpose: string;
+  scriptText: string;
+  technique: string;
+  effectiveness: number;
+}
+
+export interface ScriptScore {
+  hookStrength: number;
+  structureClarity: number;
+  emotionalAppeal: number;
+  callToAction: number;
+  overall: number;
+}
+
+export interface ShotAnalysis {
+  shotBreakdown: ShotItem[];
+  visualRhythm: VisualRhythm;
+  visualStructure: ShotVisualStructure;
+}
+
+export interface ShotItem {
+  shotNumber: number;
+  startTime: number;
+  endTime: number;
+  shotType: string;
+  cameraMovement: string;
+  composition: string;
+  transition: string;
+  visualSubject: string;
+  onScreenText: string[];
+  energyLevel: number;
+}
+
+export interface VisualRhythm {
+  avgShotDuration: number;
+  pacePattern: string;
+  editingStyle: string;
+  transitionPattern: string;
+}
+
+export interface ShotVisualStructure {
+  openingVisual: string;
+  climaxVisual: string;
+  closingVisual: string;
+  visualContinuity: number;
+}
+
+// ============================================================
+// Timeline Analysis
+// ============================================================
+
+export interface TimelineSegment {
+  startTime: number;
+  endTime: number;
+  visualDescription: string;
+  audioDescription: string;
+  onScreenText: string[];
+  shotType: string;
+  energyLevel: number;
+  dominantEmotion: string;
+  keyActions: string[];
+}
+
+export interface TimelineAnalysis {
+  segments: TimelineSegment[];
+  overallStructure: string;
+  keyMoments: { time: number; description: string; significance: string }[];
+}
+
+// ============================================================
 // AI Insights
 // ============================================================
+
+// ============================================================
+// Engagement Trend
+// ============================================================
+
+export interface CommentTimeRef {
+  time: number;
+  text: string;
+  sentiment: 'positive' | 'negative' | 'neutral';
+}
+
+export interface PredictedPeak {
+  time: number;
+  energyScore: number;
+  sources: string[];
+  reason: string;
+}
+
+export interface EngagementTrend {
+  commentTimeReferences: CommentTimeRef[];
+  predictedPeaks: PredictedPeak[];
+  engagementCurve: string;
+  heatmapDescription: string;
+}
 
 export type InsightCategory =
   | 'success_factor'
@@ -232,6 +360,10 @@ export interface VideoAnalysis {
   rawComments: Comment[];
   insights: AIInsight[];
   whyAnalysis: WhyAnalysis | null;
+  engagementTrend: EngagementTrend | null;
+  scriptBreakdown: ScriptBreakdown | null;
+  shotAnalysis: ShotAnalysis | null;
+  timelineAnalysis: TimelineAnalysis | null;
   status: AnalysisStatus;
   aiMeta: AIPromptMeta | null;
   tags: string[];
@@ -287,7 +419,7 @@ export interface ReplicablePattern {
 
 export interface ApiKeyEntry {
   id: string;
-  provider: 'anthropic' | 'openai' | 'google';
+  provider: 'anthropic' | 'openai' | 'google' | 'openrouter' | 'deepseek' | 'doubao' | 'onetoken' | 'comeu';
   keyLastFour: string;
   isValid: boolean;
   verifiedAt?: string;
@@ -297,6 +429,7 @@ export interface ModelPreferences {
   deconstructionModel: string;
   commentModel: string;
   insightModel: string;
+  scriptShotModel: string;
   temperature: number;
 }
 
@@ -336,15 +469,18 @@ export const INSIGHT_CATEGORY_LABELS: Record<InsightCategory, string> = {
 };
 
 export const DEFAULT_MODEL_PREFERENCES: ModelPreferences = {
-  deconstructionModel: 'claude-sonnet-4-6',
-  commentModel: 'claude-sonnet-4-6',
-  insightModel: 'claude-sonnet-4-6',
+  deconstructionModel: 'gpt-5.1',
+  commentModel: 'gpt-5.1',
+  insightModel: 'gpt-5.1',
+  scriptShotModel: 'gemini-3-flash-preview',
   temperature: 0.3,
 };
 
 export const ANALYSIS_STEPS = [
-  { key: 'content', label: '内容拆解', progress: 25 },
-  { key: 'comment', label: '评论分析', progress: 50 },
-  { key: 'insight', label: '洞察生成', progress: 75 },
+  { key: 'script-shot', label: '脚本拆解+分镜分析', progress: 12 },
+  { key: 'deconstruction', label: '内容拆解', progress: 25 },
+  { key: 'timeline', label: '时间线分析', progress: 38 },
+  { key: 'comment', label: '评论分析', progress: 55 },
+  { key: 'insight', label: '洞察生成', progress: 85 },
   { key: 'why', label: '综合归因', progress: 100 },
 ] as const;

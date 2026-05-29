@@ -8,12 +8,35 @@ import { exportAnalysesAsJSON } from '../services/exportService';
 import { DEFAULT_MODEL_PREFERENCES } from '../types';
 
 const PROVIDERS = [
-  { key: 'anthropic', label: 'Anthropic (Claude)', models: ['claude-opus-4-7', 'claude-sonnet-4-6', 'claude-haiku-4-5'] },
-  { key: 'openai', label: 'OpenAI (GPT)', models: ['gpt-4o', 'gpt-4o-mini', 'o4-mini'] },
-  { key: 'google', label: 'Google (Gemini)', models: ['gemini-2.5-flash', 'gemini-2.5-pro'] },
+  { key: 'comeu', label: 'ComeU 中转站 (微信/支付宝充值，GPT线路可用)', models: [
+    'gpt-5.5-comeu', 'gpt-5.4-comeu', 'gpt-5.4-mini-comeu', 'gpt-5.3-codex-comeu',
+  ]},
+  { key: 'onetoken', label: 'OneToken 中转站 (推荐，一个Key通吃全部模型)', models: [
+    'gpt-5.1', 'gpt-5', 'gpt-5.2',
+    'claude-sonnet-4-5',
+    'gemini-3-flash-preview', 'gemini-3-flash',
+    'deepseek-v3.2',
+    'qwen3-max',
+  ]},
+  { key: 'anthropic', label: 'Anthropic (Claude) 直连', models: ['claude-opus-4-7', 'claude-sonnet-4-6', 'claude-haiku-4-5'] },
+  { key: 'openai', label: 'OpenAI (GPT) 直连', models: ['gpt-4o', 'gpt-4o-mini', 'o4-mini'] },
+  { key: 'google', label: 'Google (Gemini) 直连', models: ['gemini-2.5-flash', 'gemini-2.5-pro'] },
+  { key: 'deepseek', label: 'DeepSeek 直连', models: ['deepseek-chat', 'deepseek-reasoner'] },
+  { key: 'doubao', label: '豆包 火山引擎 (50万token/天免费)', models: [
+    'doubao-seed-1-6-vision-250815', 'Doubao-1.5-vision-pro',
+    'Doubao-1.5-thinking-pro-vision', 'doubao-seed-1-6-250815',
+    'Doubao-1.5-pro',
+  ]},
+  { key: 'openrouter', label: 'OpenRouter (免费模型)', models: [
+    'openai/gpt-oss-120b:free', 'baidu/cobuddy:free',
+    'google/gemma-4-31b-it:free', 'google/gemma-3-12b-it:free',
+    'qwen/qwen3-vl-30b-a3b-thinking:free', 'nvidia/nemotron-nano-12b-v2-vl:free',
+    'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+  ]},
 ];
 
 const TASK_TYPES = [
+  { key: 'scriptShotModel', label: '脚本拆解+分镜分析' },
   { key: 'deconstructionModel', label: '内容拆解' },
   { key: 'commentModel', label: '评论分析' },
   { key: 'insightModel', label: '洞察生成' },
@@ -123,6 +146,15 @@ export default function SettingsPage() {
                       </button>
                     )}
                   </div>
+                  {provider === 'comeu' && (
+                    <p className="text-xs text-slate-500 mt-2">注册 comeu.ai 后支持微信/支付宝充值（1RMB=1USD）。当前仅 GPT 线路可用（gpt-5.5/5.4/5.3-codex），Claude/Gemini 渠道暂未开通。</p>
+                  )}
+                  {provider === 'onetoken' && (
+                    <p className="text-xs text-slate-500 mt-2">注册 onetoken.one 后充值最低 $1（约7元），在控制台 Token 页面创建 API Key。一个 Key 通吃 GPT-5/Claude/Gemini 等所有模型。</p>
+                  )}
+                  {provider === 'doubao' && (
+                    <p className="text-xs text-slate-500 mt-2">API Key 在火山引擎控制台 → API Key 管理中获取。下方模型选择支持直接输入接入点 ID（如 ep-xxxxxxxxxx-xxxxx）。</p>
+                  )}
                 </div>
               );
             })}

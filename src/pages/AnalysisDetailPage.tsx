@@ -1,26 +1,28 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  BarChart3, MessageCircle, Lightbulb, TrendingUp, FileText,
+  BarChart3, MessageCircle, Lightbulb, TrendingUp, FileText, Image, Clock,
   ArrowLeft, Download, Trash2, Copy,
   Zap, Target, Shield, Star, AlertTriangle, ThumbsUp, ThumbsDown,
-  MessageSquare, HelpCircle, Tag,
+  MessageSquare, HelpCircle, Tag, X,
 } from 'lucide-react';
 import PageTransition from '../components/ui/PageTransition';
 import EmptyState from '../components/ui/EmptyState';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import ProgressBar from '../components/ui/ProgressBar';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAnalysisStore } from '../stores/analysisStore';
 import { useUIStore } from '../stores/uiStore';
 import { useAIStore } from '../stores/aiStore';
 import { exportAnalysisAsJSON, exportAnalysisAsCSV } from '../services/exportService';
 import { formatNumber, formatDuration } from '../utils/formatters';
 import { SEGMENT_TYPES, INSIGHT_CATEGORY_LABELS } from '../types';
-import type { AIInsight, WhyAnalysis, CommentAnalysis, ContentDeconstruction, VideoSource, VideoAnalysis } from '../types';
+import type { AIInsight, WhyAnalysis, CommentAnalysis, ContentDeconstruction, VideoSource, VideoAnalysis, ScriptBreakdown, ShotAnalysis, TimelineAnalysis } from '../types';
 
 const TABS = [
   { key: 'performance', label: '数据总览', icon: TrendingUp },
+  { key: 'script-shot', label: '脚本拆解+分镜', icon: Image },
   { key: 'content', label: '内容拆解', icon: BarChart3 },
+  { key: 'timeline', label: '时间线分析', icon: Clock },
   { key: 'comment', label: '评论分析', icon: MessageCircle },
   { key: 'insight', label: 'AI洞察', icon: Lightbulb },
   { key: 'raw', label: '原始数据', icon: FileText },
@@ -30,10 +32,14 @@ export default function AnalysisDetailPage() {
   const params = useParams();
   const navigate = useNavigate();
   const analysisId = params.analysisId as string;
-  const { analyses, deleteAnalysis, duplicateAnalysis } = useAnalysisStore();
+  const { analyses, deleteAnalysis, duplicateAnalysis, loadAllAnalyses } = useAnalysisStore();
   const { activeTab, setActiveTab } = useUIStore();
   const [showDelete, setShowDelete] = useState(false);
   const [showExport, setShowExport] = useState(false);
+
+  useEffect(() => { loadAllAnalyses(); }, [loadAllAnalyses]);
+
+  const { error: aiError, warnings, clearError } = useAIStore();
 
   const analysis = analyses.find(a => a.id === analysisId);
 
@@ -99,6 +105,61 @@ export default function AnalysisDetailPage() {
           </div>
         )}
 
+        {/* AI Error Banner */}
+        {aiError && (
+          <div className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start justify-between animate-fade-in">
+            <div className="flex items-start gap-3">
+              <AlertTriangle size={18} className="text-red-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-red-300">AI 分析出错</p>
+                <p className="text-xs text-red-400/80 mt-0.5">{aiError}</p>
+              </div>
+            </div>
+            <button onClick={clearError} className="text-slate-400 hover:text-slate-200 shrink-0">
+              <X size={16} />
+            </button>
+          </div>
+        )}
+
+        {/* Warnings (non-fatal step errors) */}
+        {warnings.length > 0 && (
+          <div className="mb-4 p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl animate-fade-in">
+            <div className="flex items-start gap-3">
+              <AlertTriangle size={18} className="text-amber-400 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-amber-300">部分步骤出现问题</p>
+                <ul className="text-xs text-amber-400/80 mt-1 space-y-0.5">
+                  {warnings.map((w, i) => (
+                    <li key={i}>{w}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Status Banner */}
+        {analysis.status === 'analyzing' && !aiError && (
+          <div className="mb-4 p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center gap-3 animate-fade-in">
+            <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+            <p className="text-sm text-amber-300">分析进行中，请稍候...</p>
+          </div>
+        )}
+
+        {analysis.status === 'error' && (
+          <div className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 animate-fade-in">
+            <AlertTriangle size={18} className="text-red-400" />
+            <p className="text-sm text-red-300">分析过程出错，请检查 API Key 配置后重新分析</p>
+          </div>
+        )}
+
+        {analysis.status === 'partial' && (
+          <div className="mb-4 p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center gap-3 animate-fade-in">
+            <AlertTriangle size={18} className="text-amber-400" />
+            <p className="text-sm text-amber-300">部分分析结果可用，某些步骤未能完成</p>
+          </div>
+        )}
+
         {/* KPI Row */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6 stagger-children">
           {[
@@ -136,7 +197,9 @@ export default function AnalysisDetailPage() {
         {/* Tab Content */}
         <div className="animate-fade-in">
           {activeTab === 'performance' && <PerformanceTab metrics={metrics} />}
+          {activeTab === 'script-shot' && <ScriptShotTab scriptBreakdown={analysis.scriptBreakdown} shotAnalysis={analysis.shotAnalysis} video={video} />}
           {activeTab === 'content' && <ContentTab deconstruction={contentDeconstruction} video={video} />}
+          {activeTab === 'timeline' && <TimelineTab timelineAnalysis={analysis.timelineAnalysis} />}
           {activeTab === 'comment' && <CommentTab analysis={commentAnalysis} />}
           {activeTab === 'insight' && <InsightTab analysis={analysis} />}
           {activeTab === 'raw' && <RawTab analysis={analysis} />}
@@ -667,6 +730,510 @@ function InsightTab({ analysis }: { analysis: VideoAnalysis }) {
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* === Engagement Trend === */}
+      {analysis.engagementTrend && (
+        <div className="space-y-4 pt-2">
+          <h2 className="text-lg font-bold text-slate-200 flex items-center gap-2">
+            <Zap size={20} className="text-amber-400" /> 参与度峰值分析
+          </h2>
+
+          {/* Engagement Curve */}
+          {analysis.engagementTrend.engagementCurve && (
+            <div className="glass-card rounded-xl p-5 glow-accent">
+              <div className="flex items-center gap-2 mb-2">
+                <TrendingUp size={16} className="text-amber-400" />
+                <h3 className="text-sm font-semibold text-slate-300">注意力曲线</h3>
+              </div>
+              <p className="text-sm text-slate-300 leading-relaxed">{analysis.engagementTrend.engagementCurve}</p>
+            </div>
+          )}
+
+          {/* Heatmap */}
+          {analysis.engagementTrend.heatmapDescription && (
+            <div className="glass-card rounded-xl p-5">
+              <div className="flex items-center gap-2 mb-2">
+                <Lightbulb size={16} className="text-yellow-400" />
+                <h3 className="text-sm font-semibold text-slate-300">热力图总结</h3>
+              </div>
+              <p className="text-sm text-slate-300 leading-relaxed">{analysis.engagementTrend.heatmapDescription}</p>
+            </div>
+          )}
+
+          {/* Predicted Peaks */}
+          {analysis.engagementTrend.predictedPeaks.length > 0 && (
+            <div className="glass-card rounded-xl p-5">
+              <h3 className="text-sm font-semibold text-slate-300 mb-3">推演峰值点</h3>
+              <div className="space-y-3">
+                {analysis.engagementTrend.predictedPeaks.map((peak, i) => (
+                  <div key={i} className="flex items-start gap-3 border border-white/5 rounded-lg p-3">
+                    <div className="flex-shrink-0 w-14 h-14 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                      <div className="text-center">
+                        <div className="text-lg font-bold text-amber-400 tabular-nums">{peak.time}</div>
+                        <div className="text-[10px] text-slate-500">秒</div>
+                      </div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-sm font-semibold text-slate-200">{peak.reason}</span>
+                        <span className={`px-1.5 py-0.5 rounded text-xs font-bold tabular-nums ${peak.energyScore > 80 ? 'bg-red-500/15 text-red-400' : peak.energyScore > 60 ? 'bg-amber-500/15 text-amber-400' : 'bg-slate-500/15 text-slate-400'}`}>
+                          {peak.energyScore}/100
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {peak.sources.map((s, j) => (
+                          <span key={j} className="px-1.5 py-0.5 bg-white/5 text-slate-500 rounded text-xs">{s}</span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Comment Time References */}
+          {analysis.engagementTrend.commentTimeReferences.length > 0 && (
+            <div className="glass-card rounded-xl p-5">
+              <h3 className="text-sm font-semibold text-slate-300 mb-3">评论区时间戳引用</h3>
+              <div className="space-y-2">
+                {analysis.engagementTrend.commentTimeReferences.map((ref, i) => (
+                  <div key={i} className="flex items-start gap-3 text-sm">
+                    <span className="flex-shrink-0 px-2 py-0.5 bg-teal-500/10 text-teal-400 rounded text-xs font-mono tabular-nums">{ref.time}s</span>
+                    <span className={`text-xs px-1.5 py-0.5 rounded ${ref.sentiment === 'positive' ? 'bg-emerald-500/10 text-emerald-400' : ref.sentiment === 'negative' ? 'bg-red-500/10 text-red-400' : 'bg-slate-500/10 text-slate-400'}`}>{ref.sentiment}</span>
+                    <span className="text-slate-400 italic truncate">{ref.text}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ScriptShotTab({ scriptBreakdown, shotAnalysis, video }: { scriptBreakdown: ScriptBreakdown | null; shotAnalysis: ShotAnalysis | null; video: VideoSource }) {
+  const { isAnalyzing, currentStep } = useAIStore();
+  const isAnalyzingScriptShot = isAnalyzing && currentStep === 'script-shot';
+
+  if (isAnalyzingScriptShot) {
+    return (
+      <div className="glass-card rounded-xl p-12 text-center">
+        <ProgressBar value={15} label="AI正在拆解脚本和分镜..." />
+      </div>
+    );
+  }
+
+  if (!scriptBreakdown && !shotAnalysis) {
+    return <EmptyState title="暂无脚本拆解和分镜分析数据" description="AI 将自动根据视频元数据推演脚本结构和分镜设计。" />;
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* === SCRIPT BREAKDOWN === */}
+      {scriptBreakdown && (
+        <div className="space-y-4">
+          <h2 className="text-lg font-bold text-slate-200 flex items-center gap-2">
+            <FileText size={20} className="text-teal-400" /> 脚本拆解
+          </h2>
+
+          {/* Overview */}
+          <div className="glass-card rounded-xl p-5 glow-accent">
+            <div className="flex items-center gap-2 mb-2">
+              <Lightbulb size={18} className="text-amber-400" />
+              <h3 className="text-sm font-semibold text-slate-300">脚本总览</h3>
+            </div>
+            <div className="space-y-2 text-sm mt-3">
+              <div className="flex justify-between">
+                <span className="text-slate-400">钩子类型</span>
+                <span className="text-slate-200">{scriptBreakdown.scriptStructure.hookType}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">叙事弧线</span>
+                <span className="text-slate-200">{scriptBreakdown.scriptStructure.narrativeArc}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">语调人设</span>
+                <span className="text-slate-200">{scriptBreakdown.scriptStructure.toneAndVoice}</span>
+              </div>
+              {scriptBreakdown.scriptStructure.hookScript && (
+                <div className="mt-2 p-3 bg-teal-500/10 border border-teal-500/20 rounded-lg">
+                  <div className="text-xs text-teal-400 mb-1">推测钩子脚本</div>
+                  <div className="text-sm text-slate-200 italic">{scriptBreakdown.scriptStructure.hookScript}</div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Key Lines */}
+          {scriptBreakdown.scriptStructure.keyLines.length > 0 && (
+            <div className="glass-card rounded-xl p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <Star size={16} className="text-yellow-400" />
+                <h3 className="text-sm font-semibold text-slate-300">金句/关键台词</h3>
+              </div>
+              <ul className="space-y-2">
+                {scriptBreakdown.scriptStructure.keyLines.map((line, i) => (
+                  <li key={i} className="text-sm text-slate-300 pl-4 border-l-2 border-yellow-500/30">{line}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Copywriting Techniques */}
+          {scriptBreakdown.scriptStructure.copywritingTechniques.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {scriptBreakdown.scriptStructure.copywritingTechniques.map((t, i) => (
+                <span key={i} className="px-3 py-1 bg-teal-500/10 text-teal-300 rounded-full text-xs">{t}</span>
+              ))}
+            </div>
+          )}
+
+          {/* Segment Scripts */}
+          {scriptBreakdown.segmentScripts.length > 0 && (
+            <div className="glass-card rounded-xl p-5">
+              <h3 className="text-sm font-semibold text-slate-300 mb-3">逐段脚本拆解</h3>
+              <div className="space-y-3">
+                {scriptBreakdown.segmentScripts.map((seg, i) => (
+                  <div key={i} className="border border-white/5 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="px-2 py-0.5 bg-white/10 text-slate-300 rounded text-xs">{seg.segment}</span>
+                      <span className="text-xs text-slate-500">{seg.technique}</span>
+                    </div>
+                    <div className="text-xs text-slate-400 mb-1">目的: {seg.purpose}</div>
+                    <div className="text-sm text-slate-200 italic mb-2">{seg.scriptText}</div>
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="text-slate-500">效果</span>
+                      <div className="flex-1 h-1 bg-white/[0.04] rounded-full overflow-hidden">
+                        <div className="h-full bg-emerald-500/60 rounded-full" style={{ width: `${seg.effectiveness}%` }} />
+                      </div>
+                      <span className="font-bold tabular-nums text-slate-400 w-8 text-right">{seg.effectiveness}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Overall Score */}
+          <div className="glass-card rounded-xl p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Zap size={16} className="text-purple-400" />
+              <h3 className="text-sm font-semibold text-slate-300">脚本评分</h3>
+            </div>
+            <div className="space-y-3">
+              {[
+                { label: '钩子强度', value: scriptBreakdown.overallScore.hookStrength },
+                { label: '结构清晰度', value: scriptBreakdown.overallScore.structureClarity },
+                { label: '情感吸引力', value: scriptBreakdown.overallScore.emotionalAppeal },
+                { label: '行动号召', value: scriptBreakdown.overallScore.callToAction },
+                { label: '综合', value: scriptBreakdown.overallScore.overall },
+              ].map(({ label, value }) => (
+                <div key={label}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-slate-400">{label}</span>
+                    <span className={`font-bold tabular-nums ${value > 70 ? 'text-emerald-400' : value > 40 ? 'text-amber-400' : 'text-red-400'}`}>{value}/100</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-white/[0.04] rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full transition-all ${value > 70 ? 'bg-emerald-500/60' : value > 40 ? 'bg-amber-500/60' : 'bg-red-500/60'}`} style={{ width: `${value}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* === SHOT ANALYSIS === */}
+      {shotAnalysis && (
+        <div className="space-y-4 pt-2">
+          <h2 className="text-lg font-bold text-slate-200 flex items-center gap-2">
+            <Image size={20} className="text-cyan-400" /> 分镜分析
+          </h2>
+
+          {/* Visual Rhythm */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="glass-card rounded-xl p-5">
+              <h3 className="text-sm font-semibold text-slate-300 mb-3">视觉节奏</h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">平均镜头时长</span>
+                  <span className="text-slate-200">{shotAnalysis.visualRhythm.avgShotDuration}s</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">节奏模式</span>
+                  <span className="text-slate-200">{shotAnalysis.visualRhythm.pacePattern}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">剪辑风格</span>
+                  <span className="text-slate-200">{shotAnalysis.visualRhythm.editingStyle}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="glass-card rounded-xl p-5">
+              <h3 className="text-sm font-semibold text-slate-300 mb-3">视觉结构</h3>
+              <div className="space-y-2 text-sm">
+                <div>
+                  <div className="text-xs text-slate-500 mb-0.5">开场视觉</div>
+                  <div className="text-slate-200">{shotAnalysis.visualStructure.openingVisual}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-slate-500 mb-0.5">高潮画面</div>
+                  <div className="text-slate-200">{shotAnalysis.visualStructure.climaxVisual}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-slate-500 mb-0.5">结尾视觉</div>
+                  <div className="text-slate-200">{shotAnalysis.visualStructure.closingVisual}</div>
+                </div>
+              </div>
+              <div className="mt-3">
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-slate-400">视觉连贯性</span>
+                  <span className="font-bold tabular-nums text-slate-200">{shotAnalysis.visualStructure.visualContinuity}/100</span>
+                </div>
+                <div className="w-full h-1.5 bg-white/[0.04] rounded-full overflow-hidden">
+                  <div className="h-full bg-cyan-500/60 rounded-full" style={{ width: `${shotAnalysis.visualStructure.visualContinuity}%` }} />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Rhythm extras */}
+          {shotAnalysis.visualRhythm.transitionPattern && (
+            <div className="flex flex-wrap gap-2">
+              <span className="px-3 py-1 bg-cyan-500/10 text-cyan-300 rounded-full text-xs">转场规律: {shotAnalysis.visualRhythm.transitionPattern}</span>
+            </div>
+          )}
+
+          {/* Shot Breakdown */}
+          {shotAnalysis.shotBreakdown.length > 0 && (
+            <div className="glass-card rounded-xl p-5">
+              <h3 className="text-sm font-semibold text-slate-300 mb-3">逐镜头分解</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs text-slate-500 border-b border-white/5">
+                      <th className="pb-2 pr-2">#</th>
+                      <th className="pb-2 pr-2">时间</th>
+                      <th className="pb-2 pr-2">景别</th>
+                      <th className="pb-2 pr-2">运镜</th>
+                      <th className="pb-2 pr-2">转场</th>
+                      <th className="pb-2 pr-2">主体</th>
+                      <th className="pb-2">能量</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {shotAnalysis.shotBreakdown.map((shot, i) => (
+                      <tr key={i} className="border-b border-white/[0.02]">
+                        <td className="py-2 pr-2 text-slate-500">{shot.shotNumber}</td>
+                        <td className="py-2 pr-2 text-slate-400">{shot.startTime}"-{shot.endTime}"</td>
+                        <td className="py-2 pr-2 text-slate-300">{shot.shotType}</td>
+                        <td className="py-2 pr-2 text-slate-300">{shot.cameraMovement}</td>
+                        <td className="py-2 pr-2 text-slate-300">{shot.transition}</td>
+                        <td className="py-2 pr-2 text-slate-300 max-w-[120px] truncate">{shot.visualSubject}</td>
+                        <td className="py-2">
+                          <span className={`px-2 py-0.5 rounded text-xs ${shot.energyLevel > 70 ? 'bg-red-500/15 text-red-400' : shot.energyLevel > 40 ? 'bg-amber-500/15 text-amber-400' : 'bg-slate-500/15 text-slate-400'}`}>
+                            {shot.energyLevel}/100
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TimelineTab({ timelineAnalysis }: { timelineAnalysis: TimelineAnalysis | null }) {
+  const { isAnalyzing, currentStep } = useAIStore();
+  const isAnalyzingTimeline = isAnalyzing && currentStep === 'timeline';
+
+  if (isAnalyzingTimeline) {
+    return (
+      <div className="glass-card rounded-xl p-12 text-center">
+        <ProgressBar value={38} label="AI正在分析视频时间线..." />
+      </div>
+    );
+  }
+
+  if (!timelineAnalysis || timelineAnalysis.segments.length === 0) {
+    return <EmptyState title="暂无时间线分析数据" description="AI 将根据视频信息自动生成逐秒时间线分析" />;
+  }
+
+  const { segments, overallStructure, keyMoments } = timelineAnalysis;
+
+  const shotTypeLabels: Record<string, string> = {
+    'close-up': '特写', 'medium': '中景', 'wide': '远景',
+    'over-the-shoulder': '过肩', 'POV': '主观视角', 'split-screen': '分屏', 'text-only': '纯文字',
+  };
+
+  const emotionColors: Record<string, string> = {
+    excitement: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+    curiosity: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+    surprise: 'bg-pink-500/20 text-pink-400 border-pink-500/30',
+    humor: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+    calm: 'bg-teal-500/20 text-teal-400 border-teal-500/30',
+    urgency: 'bg-red-500/20 text-red-400 border-red-500/30',
+    inspiration: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    empathy: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+    tension: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+    neutral: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Overall Structure */}
+      {overallStructure && (
+        <div className="glass-card rounded-xl p-5 glow-accent">
+          <div className="flex items-center gap-2 mb-2">
+            <Lightbulb size={18} className="text-amber-400" />
+            <h3 className="text-sm font-semibold text-slate-300">整体结构</h3>
+          </div>
+          <p className="text-sm text-slate-300 leading-relaxed">{overallStructure}</p>
+        </div>
+      )}
+
+      {/* Timeline */}
+      <div className="glass-card rounded-xl p-5">
+        <h3 className="text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2">
+          <Clock size={16} className="text-teal-400" />
+          时间线 ({segments.length} 个片段)
+        </h3>
+
+        <div className="relative">
+          {/* Vertical line */}
+          <div className="absolute left-[19px] top-2 bottom-2 w-0.5 bg-gradient-to-b from-emerald-500/30 via-teal-500/30 to-amber-500/30" />
+
+          <div className="space-y-0">
+            {segments.map((seg, i) => {
+              const isKeyMoment = keyMoments.some(m => m.time >= seg.startTime && m.time < seg.endTime);
+              const keyMoment = keyMoments.find(m => m.time >= seg.startTime && m.time < seg.endTime);
+
+              return (
+                <div key={i} className="relative pl-12 pb-4">
+                  {/* Timeline dot */}
+                  <div className={`absolute left-[15px] top-1 w-2.5 h-2.5 rounded-full border-2 z-10 ${
+                    isKeyMoment ? 'bg-amber-400 border-amber-500 shadow-lg shadow-amber-500/30' : 'bg-slate-700 border-slate-600'
+                  }`} />
+
+                  {/* Segment card */}
+                  <div className={`border rounded-lg p-4 transition-colors ${
+                    isKeyMoment ? 'border-amber-500/20 bg-amber-500/[0.03]' : 'border-white/5'
+                  }`}>
+                    {/* Header */}
+                    <div className="flex items-center gap-3 mb-3">
+                      <span className="text-xs font-bold text-emerald-400 tabular-nums bg-emerald-500/10 px-2 py-0.5 rounded">
+                        {seg.startTime}s - {seg.endTime}s
+                      </span>
+                      <span className="text-xs text-slate-500">
+                        {(seg.endTime - seg.startTime).toFixed(1)}s
+                      </span>
+                      {seg.shotType && (
+                        <span className="text-xs text-slate-500 bg-white/5 px-2 py-0.5 rounded">
+                          {shotTypeLabels[seg.shotType] || seg.shotType}
+                        </span>
+                      )}
+                      {seg.dominantEmotion && (
+                        <span className={`text-xs px-2 py-0.5 rounded border ${emotionColors[seg.dominantEmotion] || emotionColors.neutral}`}>
+                          {seg.dominantEmotion}
+                        </span>
+                      )}
+                      {isKeyMoment && (
+                        <span className="text-xs text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                          关键时刻
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Descriptions */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                      <div>
+                        <span className="text-xs text-slate-500 block mb-1">画面</span>
+                        <p className="text-sm text-slate-300">{seg.visualDescription}</p>
+                      </div>
+                      <div>
+                        <span className="text-xs text-slate-500 block mb-1">音频</span>
+                        <p className="text-sm text-slate-300">{seg.audioDescription}</p>
+                      </div>
+                    </div>
+
+                    {/* On-screen text */}
+                    {seg.onScreenText.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mb-3">
+                        {seg.onScreenText.map((t, j) => (
+                          <span key={j} className="px-2 py-0.5 bg-cyan-500/10 text-cyan-400 rounded text-xs border border-cyan-500/20">
+                            {t}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Actions */}
+                    {seg.keyActions.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mb-3">
+                        {seg.keyActions.map((a, j) => (
+                          <span key={j} className="px-2 py-0.5 bg-white/5 text-slate-400 rounded text-xs">{a}</span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Energy bar */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-500 shrink-0">能量</span>
+                      <div className="flex-1 h-1.5 bg-white/[0.04] rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${seg.energyLevel > 70 ? 'bg-red-500/60' : seg.energyLevel > 40 ? 'bg-amber-500/60' : 'bg-teal-500/60'}`}
+                          style={{ width: `${seg.energyLevel}%` }}
+                        />
+                      </div>
+                      <span className="text-xs font-bold tabular-nums text-slate-400 shrink-0 w-8 text-right">{seg.energyLevel}</span>
+                    </div>
+
+                    {/* Key moment note */}
+                    {keyMoment && (
+                      <div className="mt-3 p-3 bg-amber-500/[0.06] border border-amber-500/10 rounded-lg">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Zap size={12} className="text-amber-400" />
+                          <span className="text-xs font-medium text-amber-300">{keyMoment.description}</span>
+                        </div>
+                        <p className="text-xs text-amber-400/70">{keyMoment.significance}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Key Moments Summary */}
+      {keyMoments.length > 0 && (
+        <div className="glass-card rounded-xl p-5">
+          <h3 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
+            <Zap size={16} className="text-amber-400" />
+            关键时刻
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {keyMoments.map((m, i) => (
+              <div key={i} className="flex gap-3 p-3 border border-amber-500/10 rounded-lg bg-amber-500/[0.02]">
+                <span className="text-sm font-bold text-amber-400 tabular-nums shrink-0">{m.time}s</span>
+                <div>
+                  <p className="text-sm text-slate-200">{m.description}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{m.significance}</p>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

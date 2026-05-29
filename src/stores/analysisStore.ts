@@ -24,6 +24,7 @@ export const useAnalysisStore = create<AnalysisStore>((set, get) => ({
   loaded: false,
 
   loadAllAnalyses: async () => {
+    if (get().loaded) return;
     const analyses = await storage.getAllAnalyses();
     set({ analyses, loaded: true });
   },
@@ -54,6 +55,10 @@ export const useAnalysisStore = create<AnalysisStore>((set, get) => ({
       } : null,
       insights: [],
       whyAnalysis: null,
+      engagementTrend: null,
+      scriptBreakdown: null,
+      shotAnalysis: null,
+      timelineAnalysis: null,
       status: 'draft',
       aiMeta: null,
       tags: [],

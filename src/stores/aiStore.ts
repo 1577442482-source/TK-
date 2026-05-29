@@ -3,6 +3,7 @@ import type { ApiKeyEntry, ModelPreferences } from '../types';
 import { DEFAULT_MODEL_PREFERENCES } from '../types';
 import * as storage from '../services/storage';
 import { generateId } from '../utils/formatters';
+import { MODEL_TO_PROVIDER } from '../ai/provider-router';
 
 interface AIStore {
   apiKeys: ApiKeyEntry[];
@@ -11,6 +12,8 @@ interface AIStore {
   currentStep: string | null;
   progress: number;
   error: string | null;
+  warnings: string[];
+  settingsLoaded: boolean;
 
   loadSettings: () => Promise<void>;
   setApiKey: (provider: string, key: string) => Promise<void>;
@@ -22,6 +25,7 @@ interface AIStore {
   setStep: (step: string, progress: number) => void;
   finishAnalysis: () => void;
   setError: (error: string) => void;
+  addWarning: (warning: string) => void;
   clearError: () => void;
 }
 
@@ -32,12 +36,28 @@ export const useAIStore = create<AIStore>((set, get) => ({
   currentStep: null,
   progress: 0,
   error: null,
+  warnings: [],
+  settingsLoaded: false,
 
   loadSettings: async () => {
+    if (get().settingsLoaded) return;
     const keys = await storage.getSetting<ApiKeyEntry[]>('apiKeys');
     const prefs = await storage.getSetting<ModelPreferences>('modelPreferences');
     if (keys) set({ apiKeys: keys });
-    if (prefs) set({ modelPreferences: prefs });
+    if (prefs) {
+      // Only keep saved model names that still exist in the provider map
+      const valid: any = { ...DEFAULT_MODEL_PREFERENCES };
+      const modelKeys = ['deconstructionModel', 'commentModel', 'insightModel', 'scriptShotModel'] as const;
+      for (const k of modelKeys) {
+        if (prefs[k] && prefs[k] in MODEL_TO_PROVIDER) {
+          valid[k] = prefs[k];
+        }
+      }
+      if (typeof prefs.temperature === 'number') valid.temperature = prefs.temperature;
+      set({ modelPreferences: valid });
+      storage.saveSetting('modelPreferences', valid);
+    }
+    set({ settingsLoaded: true });
   },
 
   setApiKey: async (provider, key) => {
@@ -95,9 +115,10 @@ export const useAIStore = create<AIStore>((set, get) => ({
     }
   },
 
-  startAnalysis: () => set({ isAnalyzing: true, currentStep: 'content', progress: 0, error: null }),
+  startAnalysis: () => set({ isAnalyzing: true, currentStep: 'visual', progress: 0, error: null, warnings: [] }),
   setStep: (step, progress) => set({ currentStep: step, progress }),
   finishAnalysis: () => set({ isAnalyzing: false, currentStep: null, progress: 100 }),
   setError: (error) => set({ isAnalyzing: false, error, progress: 0 }),
-  clearError: () => set({ error: null }),
+  addWarning: (warning) => set((s) => ({ warnings: [...s.warnings, warning] })),
+  clearError: () => set({ error: null, warnings: [] }),
 }));

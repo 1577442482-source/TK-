@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "scraper": "python3 scripts/tiktok_api.py --auto-proxy",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"
